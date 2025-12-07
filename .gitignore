@@ -4,3 +4,6 @@
 /pic
 *.cfg
 __*/
+/venv
+.DS_Store
+*.png
