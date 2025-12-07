@@ -1,5 +1,6 @@
 import sys
 import os
+import re
 import datetime
 from PySide6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, 
                                QLabel, QLineEdit, QPushButton, QFileDialog, QMessageBox)
@@ -94,14 +95,26 @@ class PosterGeneratorApp(QWidget):
         self.setLayout(layout)
 
     def get_images_sorted(self, folder):
-        """获取文件夹内图片并排序"""
+        """获取文件夹内图片并按自然顺序排序 (1, 2, 10...)"""
         valid_exts = ('.jpg', '.jpeg', '.png', '.webp', '.bmp')
+        
         try:
+            # 1. 筛选文件
             files = [f for f in os.listdir(folder) 
                      if os.path.isfile(os.path.join(folder, f)) and f.lower().endswith(valid_exts)]
-            files.sort()
+            
+            # 2. 定义自然排序的 Key
+            # 原理：将字符串 "abc10.jpg" 切分为 ['abc', 10, '.jpg']，然后按列表元素比较
+            def natural_key(string_):
+                return [int(text) if text.isdigit() else text.lower() 
+                        for text in re.split('(\d+)', string_)]
+            
+            # 3. 使用 Key 进行排序
+            files.sort(key=natural_key)
+            
             return [os.path.join(folder, f) for f in files]
         except Exception as e:
+            self.show_error(f"读取或排序失败: {str(e)}")
             return []
 
     def select_directory(self):
