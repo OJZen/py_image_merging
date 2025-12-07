@@ -1,0 +1,6 @@
+/bin
+/include
+/lib
+/pic
+*.cfg
+__*/
