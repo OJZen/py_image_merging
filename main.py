@@ -5,7 +5,7 @@ import datetime
 from PySide6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, 
                                QLabel, QLineEdit, QPushButton, QFileDialog, QMessageBox)
 from PySide6.QtCore import Qt, QRegularExpression
-from PySide6.QtGui import QRegularExpressionValidator
+from PySide6.QtGui import QRegularExpressionValidator, QDragEnterEvent, QDropEvent
 
 # 导入核心生成引擎
 try:
@@ -19,8 +19,24 @@ class PosterGeneratorApp(QWidget):
         super().__init__()
         self.setWindowTitle("海报批量生成器 GUI")
         self.resize(550, 250)
+        self.setAcceptDrops(True) # 允许拖拽
         self.setup_ui()
         self.current_images = [] # 缓存当前的图片列表
+
+    def dragEnterEvent(self, event: QDragEnterEvent):
+        """拖拽进入事件"""
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+
+    def dropEvent(self, event: QDropEvent):
+        """拖拽释放事件"""
+        urls = event.mimeData().urls()
+        if urls:
+            # 获取第一个文件的路径
+            file_path = urls[0].toLocalFile()
+            if os.path.isdir(file_path):
+                self.line_dir.setText(file_path)
+                self.update_folder_info(file_path)
 
     def setup_ui(self):
         # 主布局
