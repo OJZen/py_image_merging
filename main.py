@@ -6,6 +6,7 @@ from PySide6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout,
                                QLabel, QLineEdit, QPushButton, QFileDialog, QMessageBox)
 from PySide6.QtCore import Qt, QRegularExpression
 from PySide6.QtGui import QRegularExpressionValidator, QDragEnterEvent, QDropEvent
+import subprocess
 
 # 导入核心生成引擎
 try:
@@ -21,6 +22,7 @@ class PosterGeneratorApp(QWidget):
         self.resize(600, 420)
         self.setAcceptDrops(True) # 允许拖拽
         self.current_images = [] # 缓存当前的图片列表
+        self.output_dir = None # Initialize output directory for the button
         self.setup_ui()
         self.apply_styles()
 
@@ -216,6 +218,7 @@ class PosterGeneratorApp(QWidget):
         regex = QRegularExpression("^[0-9\\s]*$")
         validator = QRegularExpressionValidator(regex)
         self.line_num.setValidator(validator)
+        self.line_num.returnPressed.connect(self.run_generation) # 支持回车直接生成
         
         setting_layout.addWidget(lbl_num)
         setting_layout.addWidget(self.line_num)
@@ -235,6 +238,27 @@ class PosterGeneratorApp(QWidget):
         self.btn_run.setCursor(Qt.PointingHandCursor)
         self.btn_run.clicked.connect(self.run_generation)
         main_layout.addWidget(self.btn_run)
+        
+        # Output feedback area
+        output_feedback_layout = QHBoxLayout()
+        output_feedback_layout.setContentsMargins(0, 10, 0, 0) # Add some top margin
+        output_feedback_layout.setAlignment(Qt.AlignCenter) # Center content horizontally
+
+        self.lbl_output_status = QLabel("")
+        self.lbl_output_status.setObjectName("InfoLabel") # Reusing existing style
+        self.lbl_output_status.setWordWrap(True) # Allow text to wrap
+        self.lbl_output_status.hide() # Initially hidden
+
+        self.btn_open_output = QPushButton("📂 打开输出目录")
+        # Reuse default QPushButton style for now
+        self.btn_open_output.setCursor(Qt.PointingHandCursor)
+        self.btn_open_output.clicked.connect(self.open_output_folder)
+        self.btn_open_output.hide() # Initially hidden
+
+        output_feedback_layout.addWidget(self.lbl_output_status)
+        output_feedback_layout.addWidget(self.btn_open_output)
+
+        main_layout.addLayout(output_feedback_layout)
         
         self.setLayout(main_layout)
 
@@ -288,7 +312,24 @@ class PosterGeneratorApp(QWidget):
     def show_success(self, message):
         QMessageBox.information(self, "完成", message)
 
+    def open_output_folder(self):
+        """打开输出文件夹"""
+        if hasattr(self, 'output_dir') and self.output_dir and os.path.isdir(self.output_dir):
+            if sys.platform == "win32":
+                os.startfile(self.output_dir)
+            elif sys.platform == "darwin": # macOS
+                subprocess.Popen(["open", self.output_dir])
+            else: # linux variants
+                subprocess.Popen(["xdg-open", self.output_dir])
+        else:
+            self.show_error("输出目录不存在或未生成。")
+
     def run_generation(self):
+        # Reset output feedback UI elements and state
+        self.lbl_output_status.hide()
+        self.btn_open_output.hide()
+        self.output_dir = None
+
         # 1. 基础校验
         pic_folder = self.line_dir.text().strip()
         num_str = self.line_num.text().strip()
@@ -333,6 +374,9 @@ class PosterGeneratorApp(QWidget):
             except Exception as e:
                 self.show_error(f"无法创建 output 文件夹: {e}")
                 return
+        
+        # Store output_dir in instance variable
+        self.output_dir = output_dir
 
         # 5. 执行生成
         self.btn_run.setEnabled(False)
@@ -342,6 +386,7 @@ class PosterGeneratorApp(QWidget):
         timestamp = datetime.datetime.now().strftime("%Y%m%d")
         start_index = 0
         success_count = 0
+        generation_successful = False # New flag
 
         try:
             for i, count in enumerate(counts):
@@ -349,25 +394,37 @@ class PosterGeneratorApp(QWidget):
                 batch_imgs = all_images[start_index : end_index]
                 
                 filename = f"template_{count}_{timestamp}_{i+1}.png"
-                output_path = os.path.join(output_dir, filename)
+                output_path = os.path.join(self.output_dir, filename) # Use self.output_dir here
 
                 if generate_poster_image(batch_imgs, output_path):
                     success_count += 1
                 else:
                     self.show_error(f"生成第 {i+1} 张海报时失败。")
                     self.btn_run.setEnabled(True)
-                    self.btn_run.setText("开始生成图片")
+                    self.btn_run.setText("🚀 开始生成海报") # Reset button text
+                    # Do not set generation_successful = True
                     return
 
                 start_index = end_index
 
-            self.show_success(f"成功处理！\n\n共生成 {success_count} 张海报。\n保存至: {output_dir}")
+            # After loop, if no errors occurred
+            generation_successful = True
+            self.lbl_output_status.setText(f"🎉 成功生成 {success_count} 张海报！")
+            self.lbl_output_status.setStyleSheet("color: #155724; background-color: #d4edda; border: 1px solid #c3e6cb; padding: 4px 10px; border-radius: 4px;")
+            self.lbl_output_status.show()
+            self.btn_open_output.show() # Only show on success
+            # Removed self.show_success here, as feedback is now in lbl_output_status
 
         except Exception as e:
             self.show_error(f"未知错误: {e}")
         finally:
             self.btn_run.setEnabled(True)
-            self.btn_run.setText("开始生成图片")
+            self.btn_run.setText("🚀 开始生成海报")
+            # If generation was not successful, ensure output button is hidden and output_dir reset
+            if not generation_successful:
+                self.lbl_output_status.hide()
+                self.btn_open_output.hide()
+                self.output_dir = None
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
